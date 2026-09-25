@@ -1,6 +1,6 @@
 # Payment service
 
-Асинхронный сервис приёма платежей. `POST /api/v1/payments` сохраняет платёж и событие `payments.new` в таблицу `outbox` одной транзакцией. Статус после создания — `pending`. Публикация в брокер и обработка платежа в этот процесс не входят.
+Асинхронный сервис приёма платежей. `POST /api/v1/payments` сохраняет платёж и событие `payments.new` в таблицу `outbox` одной транзакцией. Consumer публикует событие в RabbitMQ, проводит его через шлюз и шлёт webhook.
 
 Версия задаётся в `pyproject.toml` и видна в `GET /health`.
 
@@ -30,7 +30,7 @@ $body = @{
   currency = "RUB"
   description = "order"
   metadata = @{ order = "42" }
-  webhook_url = "https://example.com/hook"
+  webhook_url = "https://httpbin.org/post"
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/payments `
@@ -43,18 +43,16 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/payments `
 
 Повтор с тем же `Idempotency-Key` и тем же телом возвращает тот же `payment_id`. Другое тело с тем же ключом — `409`.
 
+Через несколько секунд статус становится `succeeded` или `failed` (шлюз: 90% и 10%). Webhook уходит на `webhook_url`. Если адрес не отвечает `200`, отправка повторяется три раза с паузой 1 с и 2 с. Если и это не помогло, сообщение возвращается через очередь `payments.new.retry` (пауза 1 с, затем 2 с) и после третьей доставки попадает в `payments.new.dlq`. Статус платежа к этому моменту уже записан, шлюз повторно не вызывается.
+
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:8000/api/v1/payments/<payment_id> `
   -Headers @{ "X-API-Key" = $env:API_KEY }
+
+docker compose exec postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "select status, published_at from payments p join outbox o on o.payment_id = p.id;"
 ```
 
-Строка outbox:
-
-```powershell
-docker compose exec postgres psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "select event_type, published_at from outbox;"
-```
-
-`published_at` пустой: событие записано, в очередь ещё не ушло.
+Очереди видны в панели RabbitMQ: `http://127.0.0.1:15672`. Логин и пароль — `RABBITMQ_USER` и `RABBITMQ_PASSWORD` из `.env`.
 
 ## Проверки
 

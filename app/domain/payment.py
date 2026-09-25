@@ -71,6 +71,13 @@ class Payment:
             created_at=datetime.now(timezone.utc),
         )
 
+    def finish(self, succeeded: bool) -> None:
+        """Фиксирует итог шлюза. Повторный вызов статус не меняет."""
+        if self.status is not PaymentStatus.PENDING:
+            return
+        self.status = PaymentStatus.SUCCEEDED if succeeded else PaymentStatus.FAILED
+        self.processed_at = datetime.now(timezone.utc)
+
     def same_data(self, other: "Payment") -> bool:
         """Совпадает ли тело запроса, без учёта id и статуса."""
         return (

@@ -58,6 +58,15 @@ class SqlAlchemyPaymentRepository:
         await self._session.flush()
         return True
 
+    async def save(self, payment: Payment) -> None:
+        """Обновляет статус и время обработки одной строкой."""
+        row = await self._session.get(PaymentModel, payment.id)
+        if row is None:
+            return
+        row.status = payment.status.value
+        row.processed_at = payment.processed_at
+        await self._session.flush()
+
 
 def _is_duplicate_idempotency(error: IntegrityError) -> bool:
     text = str(error.orig).lower()
