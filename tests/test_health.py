@@ -1,5 +1,3 @@
-"""Проверка служебного эндпоинта."""
-
 from httpx import ASGITransport, AsyncClient
 
 from app import __version__
