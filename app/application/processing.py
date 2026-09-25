@@ -1,11 +1,14 @@
+import logging
 from typing import Protocol
 from uuid import UUID
 
 from app.domain.payment import Payment, PaymentStatus
 
+logger = logging.getLogger(__name__)
+
 
 class WebhookDeliveryError(Exception):
-    """Webhook не принял уведомление после всех попыток."""
+    """Webhook не принял уведомление."""
 
 
 class PaymentGateway(Protocol):
@@ -68,9 +71,22 @@ async def process_payment(
     """Проводит платёж один раз и отправляет webhook."""
     payment = await repository.get(payment_id)
     if payment is None:
+        logger.warning("Платёж %s не найден", payment_id)
         return
     if payment.status == PaymentStatus.PENDING:
         payment.finish(await gateway.authorize())
         await repository.save(payment)
         await transaction.commit()
+        logger.info(
+            "Платёж %s проведён со статусом %s",
+            payment.id,
+            payment.status.value,
+        )
+    else:
+        logger.info(
+            "Платёж %s уже в статусе %s, повторяем webhook",
+            payment.id,
+            payment.status.value,
+        )
     await notifier.notify(payment)
+    logger.info("Webhook отправлен для платежа %s", payment.id)

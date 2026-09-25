@@ -1,8 +1,11 @@
+import logging
 from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.infrastructure.db.outbox import SqlAlchemyOutbox
+
+logger = logging.getLogger(__name__)
 
 
 class EventPublisher(Protocol):
@@ -30,4 +33,9 @@ async def publish_next(
             raise
         await store.mark_published(event.id)
         await session.commit()
+        logger.info(
+            "Событие %s опубликовано для платежа %s",
+            event.event_type,
+            event.payload.get("payment_id"),
+        )
         return True

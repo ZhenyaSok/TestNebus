@@ -104,32 +104,34 @@ async def test_gateway_sleeps_and_uses_threshold() -> None:
     assert sleeper.calls == [3, 4]
 
 
-async def test_webhook_retries_then_succeeds() -> None:
-    """Две ошибки отправки, третья попытка проходит."""
-    sleeper = ImmediateSleeper()
+async def test_webhook_sends_once() -> None:
+    """Успешный адрес получает один POST с уже записанным статусом."""
+    payment = _payment()
+    payment.finish(True)
     calls = 0
 
     async def post(url: str, body: dict[str, str]) -> None:
         nonlocal calls
         calls += 1
-        if calls < 3:
-            raise RuntimeError(url)
+        assert url == payment.webhook_url
+        assert body["status"] == "succeeded"
 
-    notifier = HttpWebhookNotifier(sleeper, post=post)
-    await notifier.notify(_payment())
-    assert calls == 3
-    assert sleeper.calls == [1.0, 2.0]
+    await HttpWebhookNotifier(post=post).notify(payment)
+    assert calls == 1
 
 
-async def test_webhook_gives_up_after_three_attempts() -> None:
-    """Три неудачи подряд заканчиваются ошибкой доставки."""
+async def test_webhook_failure_is_delivery_error() -> None:
+    """Один неуспешный POST поднимает ошибку доставки."""
+    calls = 0
 
     async def post(url: str, body: dict[str, str]) -> None:
+        nonlocal calls
+        calls += 1
         raise RuntimeError(url)
 
-    notifier = HttpWebhookNotifier(ImmediateSleeper(), post=post)
     with pytest.raises(WebhookDeliveryError):
-        await notifier.notify(_payment())
+        await HttpWebhookNotifier(post=post).notify(_payment())
+    assert calls == 1
 
 
 async def test_process_payment_charges_once(

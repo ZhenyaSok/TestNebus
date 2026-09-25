@@ -85,12 +85,16 @@ async def deliver_payment(
             await process_payment(
                 repository,
                 SimulatedGateway(AsyncSleeper()),
-                HttpWebhookNotifier(AsyncSleeper()),
+                HttpWebhookNotifier(),
                 SessionCommit(session),
                 payment_id,
             )
         except WebhookDeliveryError:
-            logger.exception("Webhook не доставлен")
+            logger.warning(
+                "Webhook не доставлен для платежа %s, попытка %s",
+                payload.get("payment_id"),
+                attempts,
+            )
             await _forward(broker, payload, attempts)
         except Exception:
             logger.exception("Не удалось обработать платёж")
@@ -103,7 +107,15 @@ async def _forward(
 ) -> None:
     decision = decide_delivery(attempts)
     delivery = RabbitDelivery(broker)
+    payment_id = payload.get("payment_id")
     if isinstance(decision, SendToDeadLetter):
+        logger.warning("Платёж %s отправлен в DLQ на попытке %s", payment_id, attempts)
         await delivery.dead(payload)
         return
+    logger.info(
+        "Платёж %s вернётся через %s с, попытка %s",
+        payment_id,
+        decision.delay_seconds,
+        decision.attempts,
+    )
     await delivery.retry(payload, decision)

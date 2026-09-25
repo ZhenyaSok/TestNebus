@@ -1,7 +1,10 @@
+import logging
 from typing import Any, Protocol
 from uuid import UUID
 
 from app.domain.payment import PAYMENT_CREATED_EVENT, Payment
+
+logger = logging.getLogger(__name__)
 
 
 class IdempotencyConflict(Exception):
@@ -37,7 +40,7 @@ async def create_payment(repository: PaymentRepository, payment: Payment) -> Pay
     """Сохраняет платёж. Повтор с тем же телом возвращает уже созданный."""
     existing = await repository.get_by_idempotency_key(payment.idempotency_key)
     if existing is not None:
-        return _same_or_conflict(existing, payment)
+        return _repeat(existing, payment)
 
     saved = await repository.add(
         payment,
@@ -45,12 +48,13 @@ async def create_payment(repository: PaymentRepository, payment: Payment) -> Pay
         {"payment_id": str(payment.id)},
     )
     if saved:
+        logger.info("Платёж %s принят", payment.id)
         return payment
 
     existing = await repository.get_by_idempotency_key(payment.idempotency_key)
     if existing is None:
         raise RuntimeError("Не удалось сохранить платёж")
-    return _same_or_conflict(existing, payment)
+    return _repeat(existing, payment)
 
 
 async def get_payment(repository: PaymentRepository, payment_id: UUID) -> Payment:
@@ -61,7 +65,8 @@ async def get_payment(repository: PaymentRepository, payment_id: UUID) -> Paymen
     return payment
 
 
-def _same_or_conflict(existing: Payment, incoming: Payment) -> Payment:
+def _repeat(existing: Payment, incoming: Payment) -> Payment:
     if not existing.same_data(incoming):
         raise IdempotencyConflict()
+    logger.info("Платёж %s возвращён по ключу идемпотентности", existing.id)
     return existing

@@ -8,6 +8,7 @@ from faststream.rabbit import RabbitBroker, RabbitMessage
 
 from app.config import get_settings
 from app.infrastructure.db.session import session_factory
+from app.infrastructure.logging import configure_logging
 from app.infrastructure.messaging.delivery import deliver_payment, read_attempts
 from app.infrastructure.messaging.relay import EventPublisher, publish_next
 from app.infrastructure.messaging.topology import (
@@ -73,7 +74,7 @@ async def serve() -> None:
 
 def main() -> None:
     """Точка входа процесса consumer."""
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
     asyncio.run(serve())
 
 
