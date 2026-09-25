@@ -16,7 +16,9 @@ poetry install
 poetry run uvicorn app.main:app --reload
 ```
 
-Проверка живости: `GET http://127.0.0.1:8000/health` → `{"status":"ok"}`.
+Версия сервиса задаётся в `pyproject.toml` и отдаётся в `GET /health`.
+
+Проверка живости: `GET http://127.0.0.1:8000/health` → `{"status":"ok","version":"0.1.0"}`.
 
 Скопируйте `.env.example` в `.env`, когда появятся Postgres и RabbitMQ.
 
